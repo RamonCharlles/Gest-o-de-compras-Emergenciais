@@ -88,8 +88,14 @@ def tela_comprador():
         st.info("Não há solicitações pendentes ou em andamento.")
         return
 
-    st.markdown("### 📋 Resumo das Solicitações Pendentes")
-    st.dataframe(pendentes[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
+    st.markdown("### 🧰 Materiais (Peças)")
+    materiais = pendentes[pendentes["Tipo"] == "Material"]
+    st.dataframe(materiais[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
+
+    st.markdown("### 🛠️ Serviços")
+    servicos = pendentes[pendentes["Tipo"] == "Serviço"]
+    st.dataframe(servicos[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
+
     st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv", mime="text/csv")
 
     opcoes = (pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]).tolist()
