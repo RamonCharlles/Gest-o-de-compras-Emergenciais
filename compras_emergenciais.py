@@ -16,7 +16,7 @@ def carregar_dados():
         return pd.read_csv(DATA_FILE)
     else:
         return pd.DataFrame(columns=[
-            "ID", "Nome", "Registro", "OS", "RC", "Descrição", "Tipo",
+            "ID", "Nome", "Registro", "OS", "RC", "TAG", "Descrição", "Tipo",
             "Data Solicitação", "Lead Time", "Status", "Previsão Entrega",
             "Motivo Atraso", "Prioridade", "Observações"
         ])
@@ -36,6 +36,7 @@ def tela_cadastro():
         registro = st.text_input("Registro / Matrícula")
         os_num = st.text_input("Número da OS")
         rc_num = st.text_input("Número da RC")
+        tag = st.text_input("TAG do Equipamento")
         descricao = st.text_area("Descrição do Item")
         tipo = st.selectbox("Tipo de Solicitação", ["Material", "Serviço"])
         data_solicitacao = datetime.today().strftime("%Y-%m-%d")
@@ -43,7 +44,7 @@ def tela_cadastro():
         submitted = st.form_submit_button("Cadastrar Solicitação")
 
         if submitted:
-            if not (nome and registro and os_num and rc_num and descricao):
+            if not (nome and registro and os_num and rc_num and tag and descricao):
                 st.error("Todos os campos devem ser preenchidos.")
             else:
                 df = carregar_dados()
@@ -53,6 +54,7 @@ def tela_cadastro():
                     "Registro": registro,
                     "OS": os_num,
                     "RC": rc_num,
+                    "TAG": tag,
                     "Descrição": descricao,
                     "Tipo": tipo,
                     "Data Solicitação": data_solicitacao,
@@ -63,7 +65,7 @@ def tela_cadastro():
                     "Prioridade": "Média",
                     "Observações": ""
                 }
-                df = df.append(novo_registro, ignore_index=True)
+                df = pd.concat([df, pd.DataFrame([novo_registro])], ignore_index=True)
                 salvar_dados(df)
                 st.success("Solicitação cadastrada com sucesso!")
 
@@ -94,6 +96,7 @@ def tela_comprador():
         st.markdown("### Informações da Solicitação")
         st.write(f"**Descrição:** {linha['Descrição']}")
         st.write(f"**Solicitante:** {linha['Nome']} - Matrícula: {linha['Registro']}")
+        st.write(f"**TAG do Equipamento:** {linha['TAG']}")
         st.write(f"**Data da Solicitação:** {linha['Data Solicitação']}")
         st.write(f"**Status Atual:** {linha['Status']}")
 
@@ -189,3 +192,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
