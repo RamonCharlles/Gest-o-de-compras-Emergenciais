@@ -18,7 +18,7 @@ def carregar_dados():
         return pd.DataFrame(columns=[
             "ID", "Nome", "Registro", "OS", "RC", "TAG", "Descrição", "Tipo",
             "Data Solicitação", "Lead Time", "Status", "Previsão Entrega",
-            "Motivo Atraso", "Prioridade", "Observações"
+            "Motivo Atraso", "Ordem de Compra", "Prioridade", "Observações"
         ])
 
 # Salva os dados
@@ -62,6 +62,7 @@ def tela_cadastro():
                     "Status": "Pendente",
                     "Previsão Entrega": "",
                     "Motivo Atraso": "",
+                    "Ordem de Compra": "",
                     "Prioridade": "Média",
                     "Observações": ""
                 }
@@ -80,7 +81,7 @@ def tela_comprador():
         st.warning("Nenhuma solicitação registrada ainda.")
         return
 
-    pendentes = df[df["Status"].isin(["Pendente", "Em Andamento", "Aguardando Fornecedor"])]
+    pendentes = df[df["Status"].isin(["Pendente", "Em Andamento", "Aguardando Fornecedor", "Em cotação", "Em aprovação no 14", "Em aprovação no 15"])]
 
     if pendentes.empty:
         st.info("Não há solicitações pendentes ou em andamento.")
@@ -94,17 +95,26 @@ def tela_comprador():
         linha = df[df["ID"] == id_selecionado].iloc[0]
 
         st.markdown("### Informações da Solicitação")
-        st.write(f"**Descrição:** {linha['Descrição']}")
-        st.write(f"**Solicitante:** {linha['Nome']} - Matrícula: {linha['Registro']}")
-        st.write(f"**TAG do Equipamento:** {linha['TAG']}")
-        st.write(f"**Data da Solicitação:** {linha['Data Solicitação']}")
-        st.write(f"**Status Atual:** {linha['Status']}")
+        with st.container():
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Descrição:** {linha['Descrição']}")
+                st.write(f"**TAG:** {linha['TAG']}")
+                st.write(f"**Tipo:** {linha['Tipo']}")
+            with col2:
+                st.write(f"**Solicitante:** {linha['Nome']} - {linha['Registro']}")
+                st.write(f"**Data Solicitação:** {linha['Data Solicitação']}")
+                st.write(f"**Status Atual:** {linha['Status']}")
 
         with st.form("form_comprador"):
             nova_previsao = st.date_input("Previsão de Entrega", value=datetime.today())
             novo_status = st.selectbox("Status do Processo", [
+                "Em cotação", "Em aprovação no 14", "Em aprovação no 15",
                 "Em Andamento", "Aguardando Fornecedor", "Cancelado", "Pendente"
             ])
+            ordem_compra = ""
+            if novo_status in ["Em aprovação no 14", "Em aprovação no 15"]:
+                ordem_compra = st.text_input("Número da Ordem de Compra")
             motivo_atraso = st.text_area("Motivo do Atraso (se houver alteração de prazo)")
 
             enviado = st.form_submit_button("Atualizar Solicitação")
@@ -130,6 +140,8 @@ def tela_comprador():
                 df_copy.at[idx, "Previsão Entrega"] = nova_data_str
                 df_copy.at[idx, "Status"] = status_final
                 df_copy.at[idx, "Motivo Atraso"] = motivo_atraso
+                if novo_status in ["Em aprovação no 14", "Em aprovação no 15"]:
+                    df_copy.at[idx, "Ordem de Compra"] = ordem_compra
 
                 if status_final == "Processo Concluído":
                     data_solicitacao = datetime.strptime(df_copy.at[idx, "Data Solicitação"], "%Y-%m-%d")
