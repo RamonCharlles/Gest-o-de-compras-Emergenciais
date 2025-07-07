@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
 import os
 
@@ -9,10 +8,8 @@ DATA_FILE = "cadastro_compras.csv"
 def carregar_dados():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE, dtype={"ID": str})
-        # Converter colunas de data para datetime, com coerção
         df["Data Solicitação"] = pd.to_datetime(df["Data Solicitação"], errors="coerce")
         df["Previsão Entrega"] = pd.to_datetime(df["Previsão Entrega"], errors="coerce")
-        # Calcular lead time (dias)
         df["Lead Time"] = (df["Previsão Entrega"] - df["Data Solicitação"]).dt.days
         return df
     else:
@@ -39,7 +36,6 @@ def tela_requisitante():
         submit = st.form_submit_button("Cadastrar Solicitação")
 
         if submit:
-            # Validação básica
             if not all([nome.strip(), registro.strip(), os_num.strip(), rc_num.strip(), tag.strip(), descricao.strip()]):
                 st.error("Por favor, preencha todos os campos.")
                 return
@@ -74,7 +70,6 @@ def tela_comprador():
         st.warning("Nenhuma solicitação cadastrada.")
         return
 
-    # Filtra status relevantes para comprador
     status_validos = [
         "Pendente", "Em cotação", "Em aprovação no 14", "Em aprovação no 15",
         "Em Andamento", "Aguardando Fornecedor", "Em Atraso"
@@ -145,7 +140,6 @@ def tela_comprador():
                 nova_data_str = nova_previsao.strftime("%Y-%m-%d")
                 status_final = novo_status
 
-                # Checar atraso e motivo
                 if pd.notna(data_antiga):
                     try:
                         data_antiga_dt = pd.to_datetime(data_antiga)
@@ -179,7 +173,6 @@ def tela_administrador():
     df["Previsão Entrega"] = pd.to_datetime(df["Previsão Entrega"], errors="coerce")
     df["Lead Time"] = (df["Previsão Entrega"] - df["Data Solicitação"]).dt.days
 
-    # Filtros
     with st.expander("Filtros de análise"):
         status_sel = st.multiselect("Status", df["Status"].dropna().unique(), default=df["Status"].dropna().unique())
         prioridade_sel = st.multiselect("Prioridade", df["Prioridade"].dropna().unique(), default=df["Prioridade"].dropna().unique())
@@ -188,7 +181,6 @@ def tela_administrador():
         data_max = df["Data Solicitação"].max()
         datas_sel = st.date_input("Intervalo Data Solicitação", [data_min, data_max])
 
-    # Aplicar filtros
     df_filtrado = df[
         (df["Status"].isin(status_sel)) &
         (df["Prioridade"].isin(prioridade_sel)) &
@@ -197,7 +189,6 @@ def tela_administrador():
         (df["Data Solicitação"] <= pd.Timestamp(datas_sel[1]))
     ]
 
-    # Indicadores
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total de solicitações", len(df_filtrado))
     media_lead = int(df_filtrado["Lead Time"].mean()) if not df_filtrado["Lead Time"].isna().all() else "-"
@@ -205,23 +196,17 @@ def tela_administrador():
     col3.metric("Solicitações Pendentes", len(df_filtrado[df_filtrado["Status"] != "Processo Concluído"]))
     col4.metric("Solicitações em Atraso", len(df_filtrado[df_filtrado["Status"] == "Em Atraso"]))
 
-    # Gráficos
     st.subheader("Distribuição por Status")
-    status_counts = df_filtrado["Status"].value_counts().reset_index()
-    status_counts.columns = ["Status", "Quantidade"]
-    fig_status = px.bar(status_counts, x="Status", y="Quantidade", color="Status", text="Quantidade")
-    st.plotly_chart(fig_status, use_container_width=True)
+    status_counts = df_filtrado["Status"].value_counts()
+    st.bar_chart(status_counts)
 
     st.subheader("Média Lead Time por Tipo")
-    lead_tipo = df_filtrado.groupby("Tipo")["Lead Time"].mean().reset_index()
-    fig_lead_tipo = px.bar(lead_tipo, x="Tipo", y="Lead Time", color="Tipo", text="Lead Time")
-    st.plotly_chart(fig_lead_tipo, use_container_width=True)
+    lead_tipo = df_filtrado.groupby("Tipo")["Lead Time"].mean()
+    st.bar_chart(lead_tipo)
 
-    # Tabela com detalhes
     st.subheader("Solicitações detalhadas")
     st.dataframe(df_filtrado.reset_index(drop=True))
 
-    # Gerenciamento de solicitação individual
     st.subheader("Editar Solicitação")
     opcoes = (df_filtrado["ID"].astype(str) + " - " + df_filtrado["Descrição"]).tolist()
     selecionada = st.selectbox("Selecione uma solicitação para editar", options=opcoes)
@@ -283,4 +268,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
