@@ -48,8 +48,9 @@ def tela_cadastro():
                 st.error("Todos os campos devem ser preenchidos.")
             else:
                 df = carregar_dados()
+                novo_id = len(df) + 1
                 novo_registro = {
-                    "ID": str(uuid.uuid4()),
+                    "ID": novo_id,
                     "Nome": nome,
                     "Registro": registro,
                     "OS": os_num,
@@ -87,11 +88,15 @@ def tela_comprador():
         st.info("Não há solicitações pendentes ou em andamento.")
         return
 
-    opcoes = pendentes["ID"] + " - " + pendentes["Descrição"]
+    st.markdown("### 📋 Resumo das Solicitações Pendentes")
+    st.dataframe(pendentes[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
+    st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv", mime="text/csv")
+
+    opcoes = pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]
     selecionada = st.selectbox("Selecione a solicitação para atualizar", options=opcoes)
 
     if selecionada:
-        id_selecionado = selecionada.split(" - ")[0]
+        id_selecionado = int(selecionada.split(" - ")[0])
         linha = df[df["ID"] == id_selecionado].iloc[0]
 
         st.markdown("### Informações da Solicitação")
@@ -164,11 +169,11 @@ def tela_admin():
     with st.expander("🔍 Ver todas as solicitações"):
         st.dataframe(df)
 
-    opcoes = df["ID"] + " - " + df["Descrição"]
+    opcoes = df["ID"].astype(str) + " - " + df["Descrição"]
     selecionada = st.selectbox("Selecione uma solicitação para gerenciar", opcoes)
 
     if selecionada:
-        id_selecionado = selecionada.split(" - ")[0]
+        id_selecionado = int(selecionada.split(" - ")[0])
         idx = df[df["ID"] == id_selecionado].index[0]
 
         st.markdown(f"### 📄 Gerenciar Solicitação")
@@ -204,4 +209,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
