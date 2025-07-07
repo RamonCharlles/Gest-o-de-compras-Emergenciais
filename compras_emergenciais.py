@@ -13,7 +13,7 @@ DATA_FILE = "cadastro_compras.csv"
 
 def carregar_dados():
     if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
+        return pd.read_csv(DATA_FILE, dtype={"ID": str})
     else:
         return pd.DataFrame(columns=[
             "ID", "Nome", "Registro", "OS", "RC", "TAG", "Descrição", "Tipo",
@@ -48,7 +48,7 @@ def tela_cadastro():
                 st.error("Todos os campos devem ser preenchidos.")
             else:
                 df = carregar_dados()
-                novo_id = len(df) + 1
+                novo_id = str(len(df) + 1)
                 novo_registro = {
                     "ID": novo_id,
                     "Nome": nome,
@@ -92,12 +92,12 @@ def tela_comprador():
     st.dataframe(pendentes[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
     st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv", mime="text/csv")
 
-    opcoes = pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]
+    opcoes = pendentes["ID"] + " - " + pendentes["Descrição"]
     selecionada = st.selectbox("Selecione a solicitação para atualizar", options=opcoes)
 
     if selecionada:
-        id_selecionado = int(selecionada.split(" - ")[0])
-        linha = df[df["ID"] == id_selecionado].iloc[0]
+        id_str = selecionada.split(" - ")[0]
+        linha = df[df["ID"] == id_str].iloc[0]
 
         st.markdown("### Informações da Solicitação")
         with st.container():
@@ -126,7 +126,7 @@ def tela_comprador():
 
             if enviado:
                 df_copy = df.copy()
-                idx = df_copy[df_copy["ID"] == id_selecionado].index[0]
+                idx = df_copy[df_copy["ID"] == id_str].index[0]
                 data_antiga = df_copy.at[idx, "Previsão Entrega"]
                 nova_data_str = nova_previsao.strftime("%Y-%m-%d")
                 status_final = novo_status
@@ -169,12 +169,16 @@ def tela_admin():
     with st.expander("🔍 Ver todas as solicitações"):
         st.dataframe(df)
 
-    opcoes = df["ID"].astype(str) + " - " + df["Descrição"]
+    opcoes = df["ID"] + " - " + df["Descrição"]
     selecionada = st.selectbox("Selecione uma solicitação para gerenciar", opcoes)
 
     if selecionada:
-        id_selecionado = int(selecionada.split(" - ")[0])
-        idx = df[df["ID"] == id_selecionado].index[0]
+        id_str = selecionada.split(" - ")[0]
+        linha = df[df["ID"] == id_str]
+        if linha.empty:
+            st.error("Solicitação não encontrada.")
+            return
+        idx = linha.index[0]
 
         st.markdown(f"### 📄 Gerenciar Solicitação")
         prioridade = st.selectbox("Prioridade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(df.at[idx, "Prioridade"]))
