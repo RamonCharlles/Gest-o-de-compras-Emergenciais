@@ -1,154 +1,269 @@
-import streamlit as streamlit_app
-import pandas as pandas_lib
-import plotly.express as plotly_express
-from datetime import datetime as data_hora
-import os as sistema_operacional
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+import os
 
-# Caminho do arquivo CSV
-CAMINHO_ARQUIVO_DADOS = "cadastro_compras.csv"
+DATA_FILE = "cadastro_compras.csv"
 
 def carregar_dados():
-    if sistema_operacional.path.exists(CAMINHO_ARQUIVO_DADOS):
-        return pandas_lib.read_csv(CAMINHO_ARQUIVO_DADOS, dtype={"ID": str})
+    if os.path.exists(DATA_FILE):
+        df = pd.read_csv(DATA_FILE, dtype={"ID": str})
+        # Converter datas para datetime
+        df["Data Solicitação"] = pd.to_datetime(df["Data Solicitação"], errors='coerce')
+        df["Previsão Entrega"] = pd.to_datetime(df["Previsão Entrega"], errors='coerce')
+        df["Lead Time"] = (df["Previsão Entrega"] - df["Data Solicitação"]).dt.days
+        return df
     else:
-        return pandas_lib.DataFrame(columns=[
+        cols = [
             "ID", "Nome", "Registro", "OS", "RC", "TAG", "Descrição", "Tipo",
             "Data Solicitação", "Lead Time", "Status", "Previsão Entrega",
             "Motivo Atraso", "Ordem de Compra", "Prioridade", "Observações"
-        ])
+        ]
+        return pd.DataFrame(columns=cols)
 
-def salvar_dados(dataframe):
-    dataframe.to_csv(CAMINHO_ARQUIVO_DADOS, index=False)
+def salvar_dados(df):
+    df.to_csv(DATA_FILE, index=False)
 
-def tela_administrador():
-    streamlit_app.title("📊 Painel do Administrador - Análise e Gestão")
-    dataframe = carregar_dados()
-    
-    if dataframe.empty:
-        streamlit_app.info("Nenhuma solicitação cadastrada.")
+# Tela do Requisitante (Cadastro)
+def tela_requisitante():
+    st.title("📋 Cadastro de Compras Emergenciais - Requisitante")
+    with st.form("form_cadastro"):
+        nome = st.text_input("Nome completo")
+        registro = st.text_input("Registro / Matrícula")
+        os_num = st.text_input("Número da OS")
+        rc_num = st.text_input("Número da RC")
+        tag = st.text_input("TAG do Equipamento")
+        descricao = st.text_area("Descrição do item")
+        tipo = st.selectbox("Tipo de solicitação", ["Material", "Serviço"])
+        data_solicitacao = datetime.today().strftime("%Y-%m-%d")
+
+        submit = st.form_submit_button("Cadastrar solicitação")
+        if submit:
+            if not all([nome.strip(), registro.strip(), os_num.strip(), rc_num.strip(), tag.strip(), descricao.strip()]):
+                st.error("Por favor, preencha todos os campos.")
+                return
+            df = carregar_dados()
+            novo_id = str(len(df) + 1)
+            novo_registro = {
+                "ID": novo_id,
+                "Nome": nome.strip(),
+                "Registro": registro.strip(),
+                "OS": os_num.strip(),
+                "RC": rc_num.strip(),
+                "TAG": tag.strip(),
+                "Descrição": descricao.strip(),
+                "Tipo": tipo,
+                "Data Solicitação": data_solicitacao,
+                "Lead Time": None,
+                "Status": "Pendente",
+                "Previsão Entrega": None,
+                "Motivo Atraso": "",
+                "Ordem de Compra": "",
+                "Prioridade": "Média",
+                "Observações": ""
+            }
+            df = pd.concat([df, pd.DataFrame([novo_registro])], ignore_index=True)
+            salvar_dados(df)
+            st.success("Solicitação cadastrada com sucesso!")
+
+# Tela do Comprador (Atualização)
+def tela_comprador():
+    st.title("📦 Painel do Comprador - Atualização de Solicitações")
+    df = carregar_dados()
+    if df.empty:
+        st.warning("Nenhuma solicitação cadastrada.")
         return
     
-    # Converter datas para datetime
-    dataframe["Data Solicitação"] = pandas_lib.to_datetime(dataframe["Data Solicitação"], errors='coerce')
-    dataframe["Previsão Entrega"] = pandas_lib.to_datetime(dataframe["Previsão Entrega"], errors='coerce')
-    
-    # Calcular Lead Time
-    dataframe["Lead Time"] = (dataframe["Previsão Entrega"] - dataframe["Data Solicitação"]).dt.days
-    
-    # --- FILTROS ---
-    with streamlit_app.expander("🔎 Filtros de análise"):
-        filtro_status = streamlit_app.multiselect("Filtrar por Status:", options=dataframe["Status"].unique(), default=dataframe["Status"].unique())
-        filtro_prioridade = streamlit_app.multiselect("Filtrar por Prioridade:", options=dataframe["Prioridade"].unique(), default=dataframe["Prioridade"].unique())
-        filtro_tipo = streamlit_app.multiselect("Filtrar por Tipo (Material/Serviço):", options=dataframe["Tipo"].unique(), default=dataframe["Tipo"].unique())
-        filtro_data_inicio, filtro_data_fim = streamlit_app.date_input("Filtrar por intervalo de data de solicitação:", [dataframe["Data Solicitação"].min(), dataframe["Data Solicitação"].max()])
-    
-    # Aplicar filtros
-    df_filtrado = dataframe[
-        (dataframe["Status"].isin(filtro_status)) &
-        (dataframe["Prioridade"].isin(filtro_prioridade)) &
-        (dataframe["Tipo"].isin(filtro_tipo)) &
-        (dataframe["Data Solicitação"] >= pandas_lib.Timestamp(filtro_data_inicio)) &
-        (dataframe["Data Solicitação"] <= pandas_lib.Timestamp(filtro_data_fim))
-    ]
-    
-    # --- INDICADORES GERAIS ---
-    streamlit_app.markdown("### 📌 Indicadores Gerais")
-    col1, col2, col3, col4 = streamlit_app.columns(4)
-    with col1:
-        streamlit_app.metric("Total de Solicitações", len(df_filtrado))
-    with col2:
-        media_lead_time = int(df_filtrado["Lead Time"].mean(skipna=True)) if not df_filtrado["Lead Time"].isna().all() else "-"
-        streamlit_app.metric("Média de Lead Time (dias)", media_lead_time)
-    with col3:
-        streamlit_app.metric("Solicitações Pendentes", len(df_filtrado[df_filtrado["Status"] != "Processo Concluído"]))
-    with col4:
-        atraso_qtd = len(df_filtrado[df_filtrado["Status"] == "Em Atraso"])
-        streamlit_app.metric("Solicitações em Atraso", atraso_qtd)
-    
-    # --- GRÁFICOS ---
-    streamlit_app.markdown("### 📊 Visualizações Gráficas")
-    # Status count
-    status_contagem = df_filtrado["Status"].value_counts().reset_index()
-    status_contagem.columns = ["Status", "Quantidade"]
-    fig_status = plotly_express.bar(status_contagem, x="Status", y="Quantidade", color="Status", text="Quantidade")
-    streamlit_app.plotly_chart(fig_status, use_container_width=True)
-    
-    # Lead time por tipo
-    leadtime_tipo = df_filtrado.groupby("Tipo")["Lead Time"].mean().reset_index()
-    fig_leadtime_tipo = plotly_express.bar(leadtime_tipo, x="Tipo", y="Lead Time", color="Tipo", text="Lead Time", title="Média de Lead Time por Tipo")
-    streamlit_app.plotly_chart(fig_leadtime_tipo, use_container_width=True)
-    
-    # Evolução de solicitações por data
-    df_filtrado["Data Solicitação Mês"] = df_filtrado["Data Solicitação"].dt.to_period('M').dt.to_timestamp()
-    evolucao = df_filtrado.groupby("Data Solicitação Mês").size().reset_index(name="Quantidade")
-    fig_evolucao = plotly_express.line(evolucao, x="Data Solicitação Mês", y="Quantidade", title="Evolução Mensal de Solicitações")
-    streamlit_app.plotly_chart(fig_evolucao, use_container_width=True)
-    
-    # --- TABELA DETALHADA ---
-    streamlit_app.markdown("### 📋 Solicitações Detalhadas")
-    streamlit_app.dataframe(df_filtrado.reset_index(drop=True))
-    
-    # --- DETALHES DA SOLICITAÇÃO ---
-    streamlit_app.markdown("### ✏️ Gerenciar Solicitação")
-    opcoes_solicitacao = (df_filtrado["ID"].astype(str) + " - " + df_filtrado["Descrição"]).tolist()
-    selecionada = streamlit_app.selectbox("Selecione uma solicitação para analisar e editar:", options=opcoes_solicitacao)
-    
-    if selecionada and " - " in selecionada:
-        id_selecionado = selecionada.split(" - ")[0].strip()
-        linha_selecionada = df_filtrado[df_filtrado["ID"] == id_selecionado]
-        if not linha_selecionada.empty:
-            indice = linha_selecionada.index[0]
+    # Filtrar pendentes/andamento
+    pendentes = df[df["Status"].isin(["Pendente", "Em Andamento", "Aguardando Fornecedor", "Em cotação", "Em aprovação no 14", "Em aprovação no 15", "Em Atraso"])]
+
+    if pendentes.empty:
+        st.info("Não há solicitações pendentes ou em andamento.")
+        return
+
+    # Separar Material e Serviço
+    st.subheader("🧰 Materiais (Peças)")
+    materiais = pendentes[pendentes["Tipo"] == "Material"]
+    st.dataframe(materiais[["ID", "Descrição", "TAG", "Status", "Previsão Entrega", "Ordem de Compra"]])
+
+    st.subheader("🛠️ Serviços")
+    servicos = pendentes[pendentes["Tipo"] == "Serviço"]
+    st.dataframe(servicos[["ID", "Descrição", "TAG", "Status", "Previsão Entrega", "Ordem de Compra"]])
+
+    st.download_button("📥 Exportar solicitações pendentes para CSV", pendentes.to_csv(index=False).encode('utf-8'), file_name="solicitacoes_pendentes.csv", mime="text/csv")
+
+    opcoes = (pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]).tolist()
+    selecionada = st.selectbox("Selecione uma solicitação para atualizar", opcoes)
+
+    if selecionada:
+        id_selecionado = selecionada.split(" - ")[0]
+        linha = df[df["ID"] == id_selecionado].iloc[0]
+
+        st.markdown("### Detalhes da solicitação")
+        st.write(f"**Descrição:** {linha['Descrição']}")
+        st.write(f"**TAG:** {linha['TAG']}")
+        st.write(f"**Tipo:** {linha['Tipo']}")
+        st.write(f"**Solicitante:** {linha['Nome']} ({linha['Registro']})")
+        st.write(f"**Data da Solicitação:** {linha['Data Solicitação']}")
+        st.write(f"**Status atual:** {linha['Status']}")
+        st.write(f"**Previsão de entrega atual:** {linha['Previsão Entrega'] if pd.notna(linha['Previsão Entrega']) else '-'}")
+
+        with st.form("form_atualizacao"):
+            nova_previsao = st.date_input("Nova previsão de entrega", value=datetime.today())
+            novo_status = st.selectbox("Status do processo", [
+                "Pendente", "Em cotação", "Em aprovação no 14", "Em aprovação no 15",
+                "Em Andamento", "Aguardando Fornecedor", "Cancelado", "Em Atraso"
+            ], index=["Pendente", "Em cotação", "Em aprovação no 14", "Em aprovação no 15",
+                     "Em Andamento", "Aguardando Fornecedor", "Cancelado", "Em Atraso"].index(linha["Status"]) if linha["Status"] in ["Pendente", "Em cotação", "Em aprovação no 14", "Em aprovação no 15", "Em Andamento", "Aguardando Fornecedor", "Cancelado", "Em Atraso"] else 0)
             
-            # Mostrar informações
-            streamlit_app.markdown(f"**ID:** {linha_selecionada.at[indice, 'ID']}")
-            streamlit_app.markdown(f"**Solicitante:** {linha_selecionada.at[indice, 'Nome']} ({linha_selecionada.at[indice, 'Registro']})")
-            streamlit_app.markdown(f"**OS:** {linha_selecionada.at[indice, 'OS']}")
-            streamlit_app.markdown(f"**RC:** {linha_selecionada.at[indice, 'RC']}")
-            streamlit_app.markdown(f"**TAG do Equipamento:** {linha_selecionada.at[indice, 'TAG']}")
-            streamlit_app.markdown(f"**Descrição:** {linha_selecionada.at[indice, 'Descrição']}")
-            streamlit_app.markdown(f"**Tipo:** {linha_selecionada.at[indice, 'Tipo']}")
-            streamlit_app.markdown(f"**Data da Solicitação:** {linha_selecionada.at[indice, 'Data Solicitação'].strftime('%Y-%m-%d') if not pandas_lib.isna(linha_selecionada.at[indice, 'Data Solicitação']) else '-'}")
-            streamlit_app.markdown(f"**Previsão de Entrega:** {linha_selecionada.at[indice, 'Previsão Entrega'].strftime('%Y-%m-%d') if not pandas_lib.isna(linha_selecionada.at[indice, 'Previsão Entrega']) else '-'}")
-            streamlit_app.markdown(f"**Status Atual:** {linha_selecionada.at[indice, 'Status']}")
-            streamlit_app.markdown(f"**Motivo do Atraso:** {linha_selecionada.at[indice, 'Motivo Atraso']}")
-            streamlit_app.markdown(f"**Ordem de Compra:** {linha_selecionada.at[indice, 'Ordem de Compra']}")
-            streamlit_app.markdown(f"**Prioridade:** {linha_selecionada.at[indice, 'Prioridade']}")
-            streamlit_app.markdown(f"**Observações:** {linha_selecionada.at[indice, 'Observações']}")
-            streamlit_app.markdown(f"**Lead Time (dias):** {linha_selecionada.at[indice, 'Lead Time']}")
+            ordem_compra = ""
+            if novo_status in ["Em aprovação no 14", "Em aprovação no 15"]:
+                ordem_compra = st.text_input("Número da Ordem de Compra", value=linha["Ordem de Compra"])
             
-            streamlit_app.markdown("---")
-            streamlit_app.markdown("### Atualizar Solicitação")
-            
-            nova_prioridade = streamlit_app.selectbox("Alterar Prioridade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(linha_selecionada.at[indice, "Prioridade"]))
-            nova_observacao = streamlit_app.text_area("Atualizar Observações", value=linha_selecionada.at[indice, "Observações"])
-            marcar_concluido = streamlit_app.checkbox("Marcar processo como concluído")
-            
-            if streamlit_app.button("Salvar Alterações"):
-                dataframe.at[indice, "Prioridade"] = nova_prioridade
-                dataframe.at[indice, "Observações"] = nova_observacao
-                if marcar_concluido:
-                    dataframe.at[indice, "Status"] = "Processo Concluído"
+            motivo_atraso = st.text_area("Motivo do atraso (se houver alteração de prazo)", value=linha["Motivo Atraso"])
+
+            enviar = st.form_submit_button("Atualizar solicitação")
+            if enviar:
+                idx = df[df["ID"] == id_selecionado].index[0]
+                data_antiga = df.at[idx, "Previsão Entrega"]
+                nova_data_str = nova_previsao.strftime("%Y-%m-%d")
+                status_final = novo_status
+
+                if pd.notna(data_antiga):
                     try:
-                        lead_time_total = (dataframe.at[indice, "Previsão Entrega"] - dataframe.at[indice, "Data Solicitação"]).days
-                        dataframe.at[indice, "Lead Time"] = lead_time_total
+                        data_antiga_dt = pd.to_datetime(data_antiga)
+                        if nova_previsao > data_antiga_dt:
+                            status_final = "Em Atraso"
+                            if not motivo_atraso.strip():
+                                st.error("Motivo do atraso é obrigatório quando a previsão é adiada!")
+                                return
                     except:
                         pass
-                salvar_dados(dataframe)
-                streamlit_app.success("Alterações salvas com sucesso!")
-                streamlit_app.experimental_rerun()
 
-# Tela de cadastro e tela do comprador podem ser inseridas aqui, ou importadas
+                df.at[idx, "Previsão Entrega"] = nova_data_str
+                df.at[idx, "Status"] = status_final
+                df.at[idx, "Motivo Atraso"] = motivo_atraso
+                if novo_status in ["Em aprovação no 14", "Em aprovação no 15"]:
+                    df.at[idx, "Ordem de Compra"] = ordem_compra
+
+                salvar_dados(df)
+                st.success("Solicitação atualizada com sucesso!")
+                st.experimental_rerun()
+
+# Tela do Administrador (Análise, filtros, gráficos, edição)
+def tela_administrador():
+    st.title("📊 Painel do Administrador - Análise e Gestão")
+    df = carregar_dados()
+
+    if df.empty:
+        st.info("Nenhuma solicitação cadastrada.")
+        return
+
+    # Preparar dados
+    df["Data Solicitação"] = pd.to_datetime(df["Data Solicitação"], errors='coerce')
+    df["Previsão Entrega"] = pd.to_datetime(df["Previsão Entrega"], errors='coerce')
+    df["Lead Time"] = (df["Previsão Entrega"] - df["Data Solicitação"]).dt.days
+
+    with st.expander("🔎 Filtros de análise"):
+        filtro_status = st.multiselect("Filtrar por Status:", options=df["Status"].dropna().unique(), default=df["Status"].dropna().unique())
+        filtro_prioridade = st.multiselect("Filtrar por Prioridade:", options=df["Prioridade"].dropna().unique(), default=df["Prioridade"].dropna().unique())
+        filtro_tipo = st.multiselect("Filtrar por Tipo (Material/Serviço):", options=df["Tipo"].dropna().unique(), default=df["Tipo"].dropna().unique())
+        min_data = df["Data Solicitação"].min()
+        max_data = df["Data Solicitação"].max()
+        filtro_datas = st.date_input("Filtrar por intervalo de data da solicitação:", [min_data, max_data])
+
+    df_filtrado = df[
+        (df["Status"].isin(filtro_status)) &
+        (df["Prioridade"].isin(filtro_prioridade)) &
+        (df["Tipo"].isin(filtro_tipo)) &
+        (df["Data Solicitação"] >= pd.Timestamp(filtro_datas[0])) &
+        (df["Data Solicitação"] <= pd.Timestamp(filtro_datas[1]))
+    ]
+
+    st.markdown("### 📌 Indicadores Gerais")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total de Solicitações", len(df_filtrado))
+    with col2:
+        media_lead = int(df_filtrado["Lead Time"].mean(skipna=True)) if not df_filtrado["Lead Time"].isna().all() else "-"
+        st.metric("Média Lead Time (dias)", media_lead)
+    with col3:
+        st.metric("Solicitações Pendentes", len(df_filtrado[df_filtrado["Status"] != "Processo Concluído"]))
+    with col4:
+        st.metric("Solicitações em Atraso", len(df_filtrado[df_filtrado["Status"] == "Em Atraso"]))
+
+    st.markdown("### 📊 Gráficos")
+    status_counts = df_filtrado["Status"].value_counts().reset_index()
+    status_counts.columns = ["Status", "Quantidade"]
+    fig_status = px.bar(status_counts, x="Status", y="Quantidade", color="Status", text="Quantidade")
+    st.plotly_chart(fig_status, use_container_width=True)
+
+    leadtime_tipo = df_filtrado.groupby("Tipo")["Lead Time"].mean().reset_index()
+    fig_lead_tipo = px.bar(leadtime_tipo, x="Tipo", y="Lead Time", color="Tipo", text="Lead Time",
+                           title="Média de Lead Time por Tipo")
+    st.plotly_chart(fig_lead_tipo, use_container_width=True)
+
+    df_filtrado["Mes Solicitação"] = df_filtrado["Data Solicitação"].dt.to_period("M").dt.to_timestamp()
+    evolucao = df_filtrado.groupby("Mes Solicitação").size().reset_index(name="Quantidade")
+    fig_evolucao = px.line(evolucao, x="Mes Solicitação", y="Quantidade", title="Evolução Mensal de Solicitações")
+    st.plotly_chart(fig_evolucao, use_container_width=True)
+
+    st.markdown("### 📋 Solicitações Detalhadas")
+    st.dataframe(df_filtrado.reset_index(drop=True))
+
+    st.markdown("### ✏️ Gerenciar Solicitação")
+    opcoes = (df_filtrado["ID"].astype(str) + " - " + df_filtrado["Descrição"]).tolist()
+    selecionada = st.selectbox("Selecione uma solicitação para editar:", options=opcoes)
+
+    if selecionada:
+        id_sel = selecionada.split(" - ")[0]
+        linha_sel = df_filtrado[df_filtrado["ID"] == id_sel]
+        if not linha_sel.empty:
+            idx = linha_sel.index[0]
+
+            st.markdown(f"**ID:** {linha_sel.at[idx, 'ID']}")
+            st.markdown(f"**Nome:** {linha_sel.at[idx, 'Nome']} ({linha_sel.at[idx, 'Registro']})")
+            st.markdown(f"**OS:** {linha_sel.at[idx, 'OS']}")
+            st.markdown(f"**RC:** {linha_sel.at[idx, 'RC']}")
+            st.markdown(f"**TAG:** {linha_sel.at[idx, 'TAG']}")
+            st.markdown(f"**Descrição:** {linha_sel.at[idx, 'Descrição']}")
+            st.markdown(f"**Tipo:** {linha_sel.at[idx, 'Tipo']}")
+            st.markdown(f"**Data Solicitação:** {linha_sel.at[idx, 'Data Solicitação'].strftime('%Y-%m-%d') if pd.notna(linha_sel.at[idx, 'Data Solicitação']) else '-'}")
+            st.markdown(f"**Previsão Entrega:** {linha_sel.at[idx, 'Previsão Entrega'].strftime('%Y-%m-%d') if pd.notna(linha_sel.at[idx, 'Previsão Entrega']) else '-'}")
+            st.markdown(f"**Status:** {linha_sel.at[idx, 'Status']}")
+            st.markdown(f"**Motivo do Atraso:** {linha_sel.at[idx, 'Motivo Atraso']}")
+            st.markdown(f"**Ordem de Compra:** {linha_sel.at[idx, 'Ordem de Compra']}")
+            st.markdown(f"**Prioridade:** {linha_sel.at[idx, 'Prioridade']}")
+            st.markdown(f"**Observações:** {linha_sel.at[idx, 'Observações']}")
+            st.markdown(f"**Lead Time:** {linha_sel.at[idx, 'Lead Time']} dias")
+
+            st.markdown("---")
+            nova_prioridade = st.selectbox("Alterar Prioridade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(linha_sel.at[idx, "Prioridade"]))
+            nova_observacao = st.text_area("Atualizar Observações", value=linha_sel.at[idx, "Observações"])
+            marcar_concluido = st.checkbox("Marcar como concluído")
+
+            if st.button("Salvar Alterações"):
+                df.at[idx, "Prioridade"] = nova_prioridade
+                df.at[idx, "Observações"] = nova_observacao
+                if marcar_concluido:
+                    df.at[idx, "Status"] = "Processo Concluído"
+                    try:
+                        lead_time_total = (df.at[idx, "Previsão Entrega"] - df.at[idx, "Data Solicitação"]).days
+                        df.at[idx, "Lead Time"] = lead_time_total
+                    except:
+                        pass
+                salvar_dados(df)
+                st.success("Alterações salvas com sucesso!")
+                st.experimental_rerun()
 
 def main():
-    perfil_selecionado = streamlit_app.sidebar.selectbox("Selecione o Perfil", ["Requisitante", "Comprador", "Administrador"])
-
-    if perfil_selecionado == "Requisitante":
-        # chamar função tela_cadastro()
-        pass
-    elif perfil_selecionado == "Comprador":
-        # chamar função tela_comprador()
-        pass
-    elif perfil_selecionado == "Administrador":
+    perfil = st.sidebar.selectbox("Selecione o Perfil", ["Requisitante", "Comprador", "Administrador"])
+    if perfil == "Requisitante":
+        tela_requisitante()
+    elif perfil == "Comprador":
+        tela_comprador()
+    elif perfil == "Administrador":
         tela_administrador()
 
 if __name__ == "__main__":
