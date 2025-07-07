@@ -2,14 +2,15 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
+import uuid
 import os
 
 # Caminho do arquivo CSV
 DATA_FILE = "cadastro_compras.csv"
 
 # Carrega os dados
+
 def carregar_dados():
     if os.path.exists(DATA_FILE):
         return pd.read_csv(DATA_FILE, dtype={"ID": str})
@@ -21,10 +22,12 @@ def carregar_dados():
         ])
 
 # Salva os dados
+
 def salvar_dados(df):
     df.to_csv(DATA_FILE, index=False)
 
 # Tela de cadastro
+
 def tela_cadastro():
     st.title("📋 Cadastro de Compras Emergenciais")
 
@@ -69,8 +72,10 @@ def tela_cadastro():
                 st.success("Solicitação cadastrada com sucesso!")
 
 # Tela do comprador
+
 def tela_comprador():
     st.title("📦 Painel do Comprador - Atualização de Solicitações")
+
     df = carregar_dados()
 
     if df.empty:
@@ -78,6 +83,10 @@ def tela_comprador():
         return
 
     pendentes = df[df["Status"].isin(["Pendente", "Em Andamento", "Aguardando Fornecedor", "Em cotação", "Em aprovação no 14", "Em aprovação no 15"])]
+
+    if pendentes.empty:
+        st.info("Não há solicitações pendentes ou em andamento.")
+        return
 
     st.markdown("### 🧰 Materiais (Peças)")
     materiais = pendentes[pendentes["Tipo"] == "Material"]
@@ -87,7 +96,7 @@ def tela_comprador():
     servicos = pendentes[pendentes["Tipo"] == "Serviço"]
     st.dataframe(servicos[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
 
-    st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv")
+    st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv", mime="text/csv")
 
     opcoes = (pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]).tolist()
     selecionada = st.selectbox("Selecione a solicitação para atualizar", options=opcoes)
@@ -153,7 +162,55 @@ def tela_comprador():
                 salvar_dados(df_copy)
                 st.success("Solicitação atualizada com sucesso!")
 
+# Tela do administrador
+
+def tela_admin():
+    st.title("🛠️ Painel do Administrador")
+    df = carregar_dados()
+
+    if df.empty:
+        st.info("Nenhum dado cadastrado.")
+        return
+
+    with st.expander("🔍 Ver todas as solicitações"):
+        st.dataframe(df)
+
+    opcoes = (df["ID"].astype(str) + " - " + df["Descrição"]).tolist()
+    if not opcoes:
+        st.warning("Nenhuma solicitação disponível.")
+        return
+
+    selecionada = st.selectbox("Selecione uma solicitação para gerenciar", opcoes)
+
+    if selecionada and " - " in selecionada:
+        id_str = selecionada.split(" - ")[0].strip()
+        linha = df[df["ID"] == id_str]
+        if linha.empty:
+            st.error("Solicitação não encontrada.")
+            return
+        idx = linha.index[0]
+
+        st.markdown(f"### 📄 Gerenciar Solicitação")
+        prioridade = st.selectbox("Prioridade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(df.at[idx, "Prioridade"]))
+        observacoes = st.text_area("Observações", value=df.at[idx, "Observações"])
+        concluir = st.checkbox("Marcar como Concluído")
+
+        if st.button("Salvar Alterações"):
+            df.at[idx, "Prioridade"] = prioridade
+            df.at[idx, "Observações"] = observacoes
+            if concluir:
+                df.at[idx, "Status"] = "Processo Concluído"
+                try:
+                    data_solicitacao = datetime.strptime(df.at[idx, "Data Solicitação"], "%Y-%m-%d")
+                    data_entrega = datetime.strptime(df.at[idx, "Previsão Entrega"], "%Y-%m-%d")
+                    df.at[idx, "Lead Time"] = (data_entrega - data_solicitacao).days
+                except:
+                    pass
+            salvar_dados(df)
+            st.success("Solicitação atualizada com sucesso!")
+
 # Menu principal
+
 def main():
     menu = st.sidebar.selectbox("Selecione o Perfil", ["Requisitante", "Comprador", "Administrador"])
 
@@ -166,3 +223,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
