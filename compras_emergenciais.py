@@ -92,11 +92,11 @@ def tela_comprador():
     st.dataframe(pendentes[["ID", "Descrição", "TAG", "Tipo", "Status", "Previsão Entrega", "Ordem de Compra"]])
     st.download_button("📥 Exportar Pendentes para CSV", pendentes.to_csv(index=False).encode("utf-8"), file_name="pendentes.csv", mime="text/csv")
 
-    opcoes = pendentes["ID"] + " - " + pendentes["Descrição"]
+    opcoes = (pendentes["ID"].astype(str) + " - " + pendentes["Descrição"]).tolist()
     selecionada = st.selectbox("Selecione a solicitação para atualizar", options=opcoes)
 
-    if selecionada:
-        id_str = selecionada.split(" - ")[0]
+    if selecionada and " - " in selecionada:
+        id_str = selecionada.split(" - ")[0].strip()
         linha = df[df["ID"] == id_str].iloc[0]
 
         st.markdown("### Informações da Solicitação")
@@ -169,11 +169,15 @@ def tela_admin():
     with st.expander("🔍 Ver todas as solicitações"):
         st.dataframe(df)
 
-    opcoes = df["ID"] + " - " + df["Descrição"]
+    opcoes = (df["ID"].astype(str) + " - " + df["Descrição"]).tolist()
+    if not opcoes:
+        st.warning("Nenhuma solicitação disponível.")
+        return
+
     selecionada = st.selectbox("Selecione uma solicitação para gerenciar", opcoes)
 
-    if selecionada:
-        id_str = selecionada.split(" - ")[0]
+    if selecionada and " - " in selecionada:
+        id_str = selecionada.split(" - ")[0].strip()
         linha = df[df["ID"] == id_str]
         if linha.empty:
             st.error("Solicitação não encontrada.")
